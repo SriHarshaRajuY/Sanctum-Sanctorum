@@ -1,9 +1,20 @@
 # Sanctum Sanctorum — Members' Bookstore
 
-A small backend for a members-only clubhouse bookstore. Members can **buy** books and
-**borrow** them from the club library. The codebase is only partly finished. Your job is
-described in [ASSIGNMENT.md](ASSIGNMENT.md), and how the exercise runs — timeline, grading,
-Git, deployment and AI usage — is in [INSTRUCTIONS.md](INSTRUCTIONS.md).
+A backend API for a members-only clubhouse bookstore where members can **buy** and **borrow** books. 
+
+## ✅ Project Status: Completed
+
+The codebase has been fully implemented, resolving all failing tests and satisfying the requirements laid out in [ASSIGNMENT.md](ASSIGNMENT.md) and [SPEC.md](SPEC.md). 
+
+### Key Implementations & Fixes:
+- **Books Catalogue:** Implemented full CRUD operations, ISBN-13 checksum validation, and dynamic filtering, sorting, and pagination.
+- **Member Management:** Added tier-based rules (`apprentice`, `adept`, `master`, `supreme`), member statistics calculations, and a paginated list endpoint (bonus feature).
+- **Order Processing:** Built atomic transactions to handle pending orders, bulk and tier-based pricing discounts, payments, and cancellations. Implemented **row-level concurrency locking** to safely handle simultaneous purchases of the last book copy (bonus feature).
+- **Loan System:** Implemented borrowing rules based on member tiers, strict due-date tracking using injected clocks, and capped late-fee calculations upon return.
+- **Reports:** Added dynamic sales reporting (Top Books).
+- **Architecture:** Kept routers completely thin, moving all heavy business logic and database transaction management into the `services/` layer to maintain data integrity.
+
+*See `NOTES.md` for full implementation details, trade-offs, and live deployment links.*
 
 ## Quick start
 
