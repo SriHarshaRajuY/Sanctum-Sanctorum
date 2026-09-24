@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Member, MemberTier, Order
+from app.models import Member, MemberTier, Order, OrderStatus
 from app.schemas import MemberCreate, MemberStats
 
 # Tiers from lowest to highest; a member's rank is their index in this list.
@@ -23,7 +23,7 @@ RESTRICTED_MIN_TIER = MemberTier.MASTER.value
 
 def tier_at_least(tier: str, minimum: str) -> bool:
     """True if ``tier`` ranks at or above ``minimum``."""
-    return TIER_ORDER.index(tier) > TIER_ORDER.index(minimum)
+    return TIER_ORDER.index(tier) >= TIER_ORDER.index(minimum)
 
 
 def ensure_can_access_restricted(member: Member) -> None:
@@ -39,7 +39,9 @@ def create_member(db: Session, data: MemberCreate, now: datetime) -> Member:
 
     Rules: email (already stripped + lowercased) must be unique -> 409; created_at = now.
     """
-    # TODO: reject an email that is already in use with 409
+    existing = db.scalar(select(Member).where(Member.email == data.email))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Member with this email already exists")
     member = Member(name=data.name, email=data.email, tier=data.tier.value, created_at=now)
     db.add(member)
     db.commit()
@@ -71,4 +73,16 @@ def get_member_stats(db: Session, member_id: int, now: datetime) -> MemberStats:
     - overdue_loans counts unreturned loans with now > due_at.
     - late_fees_cents sums late fees of returned loans.
     """
-    raise NotImplementedError("get_member_stats")
+    member = get_member(db, member_id)
+    paid_orders = [order for order in member.orders if order.status == OrderStatus.PAID.value]
+    unreturned_loans = [loan for loan in member.loans if loan.returned_at is None]
+    overdue_loans = [loan for loan in unreturned_loans if now > loan.due_at]
+    returned_loans = [loan for loan in member.loans if loan.returned_at is not None]
+    return MemberStats(
+        member_id=member.id,
+        orders_paid=len(paid_orders),
+        total_spent_cents=sum(order.total_cents for order in paid_orders),
+        active_loans=len(unreturned_loans),
+        overdue_loans=len(overdue_loans),
+        late_fees_cents=sum(loan.late_fee_cents for loan in returned_loans),
+    )
