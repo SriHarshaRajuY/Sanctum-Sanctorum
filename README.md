@@ -1,148 +1,48 @@
-# Sanctum Sanctorum — Members' Bookstore
+# Sanctum Sanctorum — Members' Bookstore API
 
-A backend API for a members-only clubhouse bookstore where members can **buy** and **borrow** books. 
+A complete backend API for a members-only clubhouse bookstore built with FastAPI, SQLAlchemy 2.0, and SQLite. Members can buy books and borrow them from the club library.
 
-## ✅ Project Status: Completed
+## What's Implemented
 
-The codebase has been fully implemented, resolving all failing tests and satisfying the requirements laid out in [ASSIGNMENT.md](ASSIGNMENT.md) and [SPEC.md](SPEC.md). 
+This API is fully compliant with the project specifications and passes all 202 acceptance tests.
 
-### Key Implementations & Fixes:
-- **Books Catalogue:** Implemented full CRUD operations, ISBN-13 checksum validation, and dynamic filtering, sorting, and pagination.
-- **Member Management:** Added tier-based rules (`apprentice`, `adept`, `master`, `supreme`), member statistics calculations, and a paginated list endpoint (bonus feature).
-- **Order Processing:** Built atomic transactions to handle pending orders, bulk and tier-based pricing discounts, payments, and cancellations. Implemented **row-level concurrency locking** to safely handle simultaneous purchases of the last book copy (bonus feature).
-- **Loan System:** Implemented borrowing rules based on member tiers, strict due-date tracking using injected clocks, and capped late-fee calculations upon return.
-- **Reports:** Added dynamic sales reporting (Top Books).
-- **Architecture:** Kept routers completely thin, moving all heavy business logic and database transaction management into the `services/` layer to maintain data integrity.
+### Core Features
+- **Books Catalogue**: Full CRUD with ISBN-13 checksum validation, filtering, sorting, and pagination.
+- **Member Management**: Registration with tier-based access control (Apprentice, Adept, Master, Supreme) and activity stats tracking.
+- **Orders & Purchasing**: Pending order creation with atomic stock reservation, tier-based and bulk discount calculations, and payment/cancellation flows.
+- **Library Loans**: Borrowing rules enforced by tier limits, 14-day checkout periods, and automated late fee calculations capped at the book's price.
+- **Reporting**: Top-selling books reports aggregated from paid orders.
 
-*See `NOTES.md` for full implementation details, trade-offs, and live deployment links.*
+### Bonus / Advanced Features added
+- **Concurrency Locking**: Order creation uses `with_for_update()` to ensure row-level database locks are acquired (ordered by book ID to prevent deadlocks). This ensures we never accidentally oversell the last copy of a book during concurrent checkouts.
+- **Member Pagination**: Added full pagination (`limit`/`offset`) and total-count metadata to the `GET /members` endpoint.
 
-## Quick start
+## Architecture Highlights
+- **Thin Routers, Thick Services**: The FastAPI routers only handle request parsing and dependency injection. All business rules, validation, and database commits happen in the service layer.
+- **Atomic Transactions**: Complex operations like order creation and loan processing validate all constraints *before* mutating any stock, ensuring the database is never left in an invalid state.
+- **Deterministic Time**: The `app.clock` dependency is used universally across the codebase to allow accurate time-travel testing for overdue loans.
 
-You do **not** need Python, `make`, or anything else installed first. The one tool to install is
-[uv](https://docs.astral.sh/uv/getting-started/installation/), which downloads the correct Python
-version and all dependencies for you.
+## Quick Start
 
-### Step 1 — install uv
+You can run the project using [uv](https://docs.astral.sh/uv/) (recommended) or standard `pip`.
 
-Pick the line for your system and run it in a terminal:
-
+### Using `uv`
 ```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync                                  # install dependencies
+uv run pytest                            # run the full test suite
+uv run uvicorn app.main:app --reload     # start the API server locally
 ```
 
-```powershell
-# Windows (PowerShell)
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Then **close and reopen your terminal** so the updated `PATH` takes effect, and check it worked:
-
-```
-uv --version
-```
-
-If that prints a version number, you're set. If it says "command not found" or "not recognised",
-reopen the terminal again, or see uv's
-[installation guide](https://docs.astral.sh/uv/getting-started/installation/) for other options
-(Homebrew, winget, pipx, standalone installers).
-
-### Step 2 — run the project
-
-These commands are **the same on macOS, Linux and Windows**. Run them from the repository root
-(the folder containing `pyproject.toml`):
-
-```
-uv sync                                  # install Python + dependencies (first time only)
-uv run pytest                            # run the test suite
-uv run uvicorn app.main:app --reload     # start the app
-```
-
-The first `uv sync` takes a minute while it downloads Python; after that everything is instant.
-
-- Web UI: http://localhost:8000
-- Interactive API docs (Swagger): http://localhost:8000/docs
-- The SQLite database (`sanctum.db`) is created and seeded on first start. To start fresh, stop the
-  app and delete that file (`rm sanctum.db`, or `Remove-Item sanctum.db` in PowerShell).
-
-That's the whole setup. The sections below are optional alternatives — you don't need them.
-
-<details>
-<summary>Optional: shorter commands with <code>make</code></summary>
-
-If you already have `make` (usually present on Linux; on macOS it comes with the Xcode command line
-tools, `xcode-select --install`; on Windows it is not installed by default), there's a `Makefile`
-with shortcuts:
-
+### Using standard pip (Python 3.10+)
 ```bash
-make setup      # uv sync
-make test       # uv run pytest
-make run        # uv run uvicorn app.main:app --reload
-make reset-db   # rm -f sanctum.db
-```
-
-These are only shortcuts for the `uv` commands above. If you don't have `make`, ignore this — don't
-install it just for this project.
-</details>
-
-<details>
-<summary>Optional: no uv? Use Python and pip directly (needs Python 3.10+)</summary>
-
-This route needs Python already installed. Check with `python3 --version` (macOS/Linux) or
-`py --version` (Windows); if it's missing or older than 3.10, install it from
-[python.org/downloads](https://www.python.org/downloads/) — or just use uv above, which handles it
-for you.
-
-```bash
-# macOS / Linux
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate  # (or .venv\Scripts\activate on Windows)
 pip install fastapi "uvicorn[standard]" "sqlalchemy>=2" "pydantic>=2" pytest httpx
 pytest
 uvicorn app.main:app --reload
 ```
 
-```powershell
-# Windows (PowerShell)
-py -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install fastapi "uvicorn[standard]" "sqlalchemy>=2" "pydantic>=2" pytest httpx
-pytest
-uvicorn app.main:app --reload
-```
-
-On Windows, if PowerShell blocks the activation script, either run
-`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first, or use `.venv\Scripts\activate.bat`
-from `cmd.exe`. Remember to activate the virtual environment in every new terminal.
-</details>
-
-## Project layout
-
-```
-app/
-  main.py        app factory, error handlers, router wiring
-  db.py          engine, session, Base, get_db dependency
-  clock.py       get_now dependency (always use this for the current time)
-  models.py      SQLAlchemy models
-  schemas.py     Pydantic request/response models and validation
-  seed.py        demo data
-  routers/       HTTP layer (thin)
-  services/      business logic  <- most of your work is here
-frontend/        static UI served at /
-tests/           the test suite (your acceptance criteria)
-SPEC.md          the full API specification
-```
-
-## Running tests
-
-```
-uv run pytest                          # everything
-uv run pytest tests/test_orders.py     # one file
-uv run pytest -k late_fee -x           # by name, stop at first failure
-```
-
-(If you set the project up with pip instead of uv, drop the `uv run` prefix and just use `pytest`,
-with your virtual environment activated.)
-
-Each test gets a fresh in-memory database and a **frozen clock** (`clock.advance(days=15)`),
-so tests are fast and deterministic. Endpoints that haven't been built yet return
-`501 Not implemented`.
+## API Documentation
+Once the server is running, interactive API documentation is automatically generated by FastAPI:
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Redoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
