@@ -1,5 +1,6 @@
 from datetime import datetime
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Book, MemberTier, Order, OrderItem, OrderStatus
@@ -25,13 +26,16 @@ def get_discount_rate(member, total_qty: int) -> int:
 def create_order(db: Session, data: OrderCreate, now: datetime) -> Order:
     member = get_member(db, data.member_id)
 
-    # load all books upfront so we can validate everything before touching stock
-    book_map = {}
+    # load all books upfront with a row-level lock to prevent concurrent overselling
+    # sorting by id prevents deadlocks if multiple transactions lock the same books
+    book_ids = [item.book_id for item in data.items]
+    stmt = select(Book).where(Book.id.in_(book_ids)).order_by(Book.id).with_for_update()
+    locked_books = db.scalars(stmt).all()
+    book_map = {b.id: b for b in locked_books}
+
     for item in data.items:
-        b = db.get(Book, item.book_id)
-        if not b:
+        if item.book_id not in book_map:
             raise HTTPException(status_code=404, detail=f"Book {item.book_id} not found")
-        book_map[item.book_id] = b
 
     # check if they're allowed to buy restricted books
     has_restricted = any(b.restricted for b in book_map.values())

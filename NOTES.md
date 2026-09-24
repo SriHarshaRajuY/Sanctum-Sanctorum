@@ -13,9 +13,9 @@ One tricky part was the stock reservation in orders. I wanted to make sure we do
 
 Also, dealing with money in cents is a lifesaver. I just used floor division (`//`) for the discount percentages so we don't have to deal with floating point weirdness.
 
-## Stuff I'd improve later
-- **Concurrency**: Right now, if two people try to buy the last copy of a book at the exact same millisecond, SQLite might let it happen or lock the db. If this was a real production app on Postgres, I'd definitely use `with_for_update()` to lock the book rows during the transaction.
-- **Pagination on members**: Didn't get around to the optional `GET /members` endpoint with pagination yet.
+## Bonus features implemented
+- **Concurrency Locking**: I made sure that if two people try to buy the last copy of a book at the exact same millisecond, we won't oversell it. I used `with_for_update()` on the book records inside `create_order`, and ordered the query by `id` so we avoid database deadlocks.
+- **Member Pagination**: Added the optional `GET /members` endpoint with proper pagination filtering and total counts, just like the books endpoint.
 
 ## AI Usage
 I used Claude to help me out with some of the boilerplate (like setting up the Pydantic schemas) and to rubber-duck a few SQLAlchemy 2.0 query syntax things. I used to write older SQLAlchemy (1.4 style) so I kept getting confused with the new `select(...)` syntax vs the old `query(...)` stuff. 
