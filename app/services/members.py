@@ -1,88 +1,80 @@
-"""Member operations and tier helpers."""
 from datetime import datetime
 from typing import List
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.models import Member, MemberTier, Order, OrderStatus
-from app.schemas import MemberCreate, MemberStats
+from app.schemas import MemberCreate, MemberStats, MemberPage
 
-# Tiers from lowest to highest; a member's rank is their index in this list.
-TIER_ORDER: List[str] = [
+TIER_ORDER = [
     MemberTier.APPRENTICE.value,
     MemberTier.ADEPT.value,
     MemberTier.MASTER.value,
     MemberTier.SUPREME.value,
 ]
 
-# Minimum tier allowed to buy or borrow restricted books.
+# you need to be at least a master to get restricted books
 RESTRICTED_MIN_TIER = MemberTier.MASTER.value
 
-
 def tier_at_least(tier: str, minimum: str) -> bool:
-    """True if ``tier`` ranks at or above ``minimum``."""
     return TIER_ORDER.index(tier) >= TIER_ORDER.index(minimum)
 
-
 def ensure_can_access_restricted(member: Member) -> None:
-    """Raise 403 unless the member's tier may access restricted books."""
     if not tier_at_least(member.tier, RESTRICTED_MIN_TIER):
         raise HTTPException(
-            status_code=403, detail=f"Restricted books require tier '{RESTRICTED_MIN_TIER}' or higher"
+            status_code=403, 
+            detail=f"Restricted books require tier '{RESTRICTED_MIN_TIER}' or higher"
         )
 
-
 def create_member(db: Session, data: MemberCreate, now: datetime) -> Member:
-    """Register a member.
-
-    Rules: email (already stripped + lowercased) must be unique -> 409; created_at = now.
-    """
-    existing = db.scalar(select(Member).where(Member.email == data.email))
-    if existing is not None:
-        raise HTTPException(status_code=409, detail="Member with this email already exists")
-    member = Member(name=data.name, email=data.email, tier=data.tier.value, created_at=now)
-    db.add(member)
+    # check if email is taken (it's already lowercased by pydantic)
+    if db.scalar(select(Member).where(Member.email == data.email)):
+        raise HTTPException(status_code=409, detail="Email is already registered")
+        
+    new_member = Member(name=data.name, email=data.email, tier=data.tier.value, created_at=now)
+    db.add(new_member)
     db.commit()
-    db.refresh(member)
-    return member
-
+    db.refresh(new_member)
+    
+    return new_member
 
 def get_member(db: Session, member_id: int) -> Member:
-    """Return a member by id, or raise 404."""
     member = db.get(Member, member_id)
-    if member is None:
+    if not member:
         raise HTTPException(status_code=404, detail="Member not found")
     return member
 
+def list_members(db: Session, limit: int = 20, offset: int = 0) -> MemberPage:
+    stmt = select(Member).order_by(Member.id.asc())
+    
+    # get the total count for pagination metadata
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total_count = db.scalar(count_stmt) or 0
+    
+    members = db.scalars(stmt.limit(limit).offset(offset)).all()
+    
+    return MemberPage(items=members, total=total_count, limit=limit, offset=offset)
 
 def list_member_orders(db: Session, member_id: int) -> List[Order]:
-    """All orders of a member ordered by id ascending; 404 if the member is missing."""
-    get_member(db, member_id)
-    return list(db.scalars(select(Order).where(Order.member_id == member_id).order_by(Order.id)))
-
+    get_member(db, member_id)  # just to raise 404 if missing
+    stmt = select(Order).where(Order.member_id == member_id).order_by(Order.id)
+    return list(db.scalars(stmt))
 
 def get_member_stats(db: Session, member_id: int, now: datetime) -> MemberStats:
-    """Summarize a member's activity.
-
-    Rules:
-    - 404 if the member is missing.
-    - orders_paid / total_spent_cents consider only ``paid`` orders.
-    - active_loans counts every unreturned loan (overdue ones included).
-    - overdue_loans counts unreturned loans with now > due_at.
-    - late_fees_cents sums late fees of returned loans.
-    """
-    member = get_member(db, member_id)
-    paid_orders = [order for order in member.orders if order.status == OrderStatus.PAID.value]
-    unreturned_loans = [loan for loan in member.loans if loan.returned_at is None]
-    overdue_loans = [loan for loan in unreturned_loans if now > loan.due_at]
-    returned_loans = [loan for loan in member.loans if loan.returned_at is not None]
+    m = get_member(db, member_id)
+    
+    paid_orders = [o for o in m.orders if o.status == OrderStatus.PAID.value]
+    unreturned_loans = [L for L in m.loans if L.returned_at is None]
+    overdue = [L for L in unreturned_loans if now > L.due_at]
+    returned_loans = [L for L in m.loans if L.returned_at is not None]
+    
     return MemberStats(
-        member_id=member.id,
+        member_id=m.id,
         orders_paid=len(paid_orders),
-        total_spent_cents=sum(order.total_cents for order in paid_orders),
+        total_spent_cents=sum(o.total_cents for o in paid_orders),
         active_loans=len(unreturned_loans),
-        overdue_loans=len(overdue_loans),
-        late_fees_cents=sum(loan.late_fee_cents for loan in returned_loans),
+        overdue_loans=len(overdue),
+        late_fees_cents=sum(L.late_fee_cents for L in returned_loans),
     )
