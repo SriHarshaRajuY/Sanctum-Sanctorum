@@ -1,8 +1,6 @@
-"""Book catalogue operations."""
 from typing import Optional
-
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Book
@@ -10,29 +8,37 @@ from app.schemas import BookCreate, BookPage, BookSort, BookUpdate
 
 
 def create_book(db: Session, data: BookCreate) -> Book:
-    """Add a book to the catalogue.
-
-    Rules: the (already normalized) ISBN must be unique -> 409 otherwise.
-    """
-    # TODO: reject a duplicate ISBN with 409
-    book = Book(**data.model_dump())
-    db.add(book)
+    # check if isbn already exists since it needs to be unique
+    stmt = select(Book).where(Book.isbn == data.isbn)
+    if db.scalar(stmt):
+        raise HTTPException(status_code=409, detail="ISBN already exists in our system")
+        
+    new_book = Book(**data.model_dump())
+    db.add(new_book)
     db.commit()
-    db.refresh(book)
-    return book
+    db.refresh(new_book)
+    
+    return new_book
 
 
 def get_book(db: Session, book_id: int) -> Book:
-    """Return a book by id, or raise 404."""
-    book = db.get(Book, book_id)
-    if book is None:
+    b = db.get(Book, book_id)
+    if not b:
         raise HTTPException(status_code=404, detail="Book not found")
-    return book
+    return b
 
 
 def update_book(db: Session, book_id: int, data: BookUpdate) -> Book:
-    """Apply a partial update. Only fields present in the request are changed; 404 if missing."""
-    raise NotImplementedError("update_book")
+    b = get_book(db, book_id)
+    
+    # only update fields that were actually passed in
+    update_data = data.model_dump(exclude_unset=True)
+    for key, val in update_data.items():
+        setattr(b, key, val)
+        
+    db.commit()
+    db.refresh(b)
+    return b
 
 
 def list_books(
@@ -45,24 +51,40 @@ def list_books(
     limit: int = 20,
     offset: int = 0,
 ) -> BookPage:
-    """Search the catalogue.
-
-    Rules:
-    - ``q`` matches title OR author, case-insensitive substring.
-    - ``restricted`` filters exactly; ``min_price``/``max_price`` are inclusive.
-    - Sorted by ``sort`` (title / price, ``-`` for descending) with ties broken by id;
-      default order is id ascending.
-    - ``total`` counts all matches before ``limit``/``offset`` are applied.
-    """
-    query = select(Book)
+    
+    stmt = select(Book)
+    
+    # apply filters
     if q:
-        query = query.where(Book.title.icontains(q, autoescape=True))
+        stmt = stmt.where(
+            or_(Book.title.icontains(q), Book.author.icontains(q))
+        )
     if restricted is not None:
-        query = query.where(Book.restricted == restricted)
-    # TODO: min_price / max_price filters
+        stmt = stmt.where(Book.restricted == restricted)
+    if min_price is not None:
+        stmt = stmt.where(Book.price_cents >= min_price)
+    if max_price is not None:
+        stmt = stmt.where(Book.price_cents <= max_price)
 
-    # TODO: apply ``sort``
-    books = db.scalars(query.order_by(Book.id.asc()).limit(limit).offset(offset)).all()
-    total = len(books)
+    # get total count before pagination
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total_matches = db.scalar(count_stmt) or 0
 
-    return BookPage(items=books, total=total, limit=limit, offset=offset)
+    # handle sorting
+    if sort == "title":
+        stmt = stmt.order_by(Book.title.asc(), Book.id.asc())
+    elif sort == "-title":
+        stmt = stmt.order_by(Book.title.desc(), Book.id.asc())
+    elif sort == "price":
+        stmt = stmt.order_by(Book.price_cents.asc(), Book.id.asc())
+    elif sort == "-price":
+        stmt = stmt.order_by(Book.price_cents.desc(), Book.id.asc())
+    else:
+        # default sort
+        stmt = stmt.order_by(Book.id.asc())
+
+    # apply pagination
+    stmt = stmt.limit(limit).offset(offset)
+    results = db.scalars(stmt).all()
+
+    return BookPage(items=results, total=total_matches, limit=limit, offset=offset)
