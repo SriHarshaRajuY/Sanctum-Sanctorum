@@ -1,4 +1,3 @@
-"""Reporting queries."""
 from typing import List
 
 from sqlalchemy import func, select
@@ -9,19 +8,22 @@ from app.schemas import TopBook
 
 
 def top_books(db: Session, limit: int = 5) -> List[TopBook]:
-    """Best-selling books.
+    # aggregate copies sold across paid orders only
+    # books with zero sales are excluded by the inner joins
+    sales_count = func.sum(OrderItem.quantity).label("copies_sold")
 
-    Rules: copies_sold sums quantities over ``paid`` orders only; books with no sales are
-    excluded; sorted by copies_sold desc, then title asc; at most ``limit`` rows.
-    """
-    copies_sold = func.sum(OrderItem.quantity).label("copies_sold")
-    rows = db.execute(
-        select(Book.id, Book.title, copies_sold)
+    stmt = (
+        select(Book.id, Book.title, sales_count)
         .join(OrderItem, OrderItem.book_id == Book.id)
         .join(Order, Order.id == OrderItem.order_id)
         .where(Order.status == OrderStatus.PAID.value)
         .group_by(Book.id, Book.title)
-        .order_by(copies_sold.desc(), Book.title.asc())
+        .order_by(sales_count.desc(), Book.title.asc())
         .limit(limit)
-    ).all()
-    return [TopBook(book_id=book_id, title=title, copies_sold=copies) for book_id, title, copies in rows]
+    )
+
+    rows = db.execute(stmt).all()
+    return [
+        TopBook(book_id=book_id, title=title, copies_sold=copies)
+        for book_id, title, copies in rows
+    ]
