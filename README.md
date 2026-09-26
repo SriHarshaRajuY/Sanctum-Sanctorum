@@ -2,6 +2,10 @@
 
 A complete backend API for a members-only clubhouse bookstore built with FastAPI, SQLAlchemy 2.0, and SQLite. Members can buy books and borrow them from the club library.
 
+- 🌐 **Live Web Application**: [https://sanctum-sanctorum-api.onrender.com/](https://sanctum-sanctorum-api.onrender.com/)
+- 📑 **Interactive OpenAPI / Swagger Docs**: [https://sanctum-sanctorum-api.onrender.com/docs](https://sanctum-sanctorum-api.onrender.com/docs)
+- 🩺 **Health Check**: [https://sanctum-sanctorum-api.onrender.com/health](https://sanctum-sanctorum-api.onrender.com/health)
+
 ## What's Implemented
 
 This API is fully compliant with the project specifications and passes all 208 tests (including 202 original acceptance tests and 6 bonus/edge-case tests).

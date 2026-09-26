@@ -1,7 +1,15 @@
 # Sanctum Sanctorum — Project Notes & Implementation Review
 
-## Live URL
-*(Pending public deployment — live link will be added upon hosting)*
+## Live Deployment URL
+**Production URL**: [https://sanctum-sanctorum-api.onrender.com](https://sanctum-sanctorum-api.onrender.com)
+
+- **Interactive Bookstore Web App**: [https://sanctum-sanctorum-api.onrender.com/](https://sanctum-sanctorum-api.onrender.com/)
+- **Health Check Endpoint**: [https://sanctum-sanctorum-api.onrender.com/health](https://sanctum-sanctorum-api.onrender.com/health) (returns `{"status": "ok"}`)
+- **Interactive OpenAPI / Swagger Docs**: [https://sanctum-sanctorum-api.onrender.com/docs](https://sanctum-sanctorum-api.onrender.com/docs)
+- **Reviewer Demo Accounts**: Sign in using seeded member ID `1` (*Stephen Strange*, tier: `master`) or member ID `2` (*Wong*, tier: `supreme`), or register a new apprentice member in the Members tab.
+
+> [!NOTE]
+> Hosted on Render's free tier. If the instance has been idle for 15+ minutes, Render spins down the container, so the first request might take ~30–50 seconds to complete a cold-start wake-up.
 
 ### How to Run and Test Locally
 ```bash
@@ -9,9 +17,9 @@ uv sync
 uv run pytest
 uv run uvicorn app.main:app --reload
 ```
-To explore the application:
+To explore the application locally:
 - **Interactive UI**: Open `http://localhost:8000` in your browser.
-- **Demo Accounts**: Sign in using seeded member ID `1` (Stephen Strange, Master) or member ID `2` (Wong, Supreme), or create a fresh apprentice member in the Members tab.
+- **Demo Accounts**: Sign in using seeded member ID `1` (Stephen Strange, Master) or member ID `2` (Wong, Supreme).
 - **Swagger / OpenAPI**: Interactive documentation is available at `http://localhost:8000/docs`.
 
 ---
@@ -87,9 +95,9 @@ If extending this into a production-grade service, here is what I would prioriti
    - *Decision*: Storing and calculating currency strictly as integer cents (`price_cents`, `discount_cents`, `total_cents`, `late_fee_cents`) using integer floor division (`//`) and math ceiling.
    - *Trade-off*: Requires dividing by 100 on the frontend for dollar display, but avoids floating-point inaccuracy (e.g. `$19.99 * 0.9` rounding issues).
 
-5. **Database Strategy (SQLite locally vs. PostgreSQL in production)**:
-   - *Decision*: Kept zero-dependency SQLite for local development and fast local test runs (`pytest`), while architecting `app/db.py` to accept PostgreSQL connection strings for deployed environments.
-   - *Trade-off*: Serverless platforms have ephemeral filesystems where SQLite files reset between invocations; deploying to production requires a managed relational database like Supabase or Neon.
+5. **Deployment Architecture & Database Portability**:
+   - *Decision*: Deployed as a web service on Render, where FastAPI serves both the REST endpoints and the static frontend from `/`. The startup lifespan automatically creates tables and seeds the demo dataset. For local development and CI testing, SQLite is used for zero-dependency instant execution (`pytest`). In `app/db.py`, I designed the connection layer to be dynamic: when switching to a managed PostgreSQL instance (e.g. Supabase, Neon) via `SANCTUM_DATABASE_URL`, SQLite-specific flags like `check_same_thread` are automatically omitted.
+   - *Trade-off*: Serverless hosts (like Vercel functions) have ephemeral disk storage where SQLite databases wipe between invocations; container-based web hosting on Render provides a smooth, reliable environment for continuous evaluation without requiring extra external network dependencies for test runs.
 
 ---
 
