@@ -20,6 +20,7 @@ To test out the application with demo data, open http://localhost:8000. You can 
 - **Bonus Extras**:
   - **Concurrency Locking**: Added database row-level locking (`with_for_update()`) on books during both order checkout and loan borrowing, ordering by book ID to avoid deadlocks.
   - **Member Pagination**: Added a paginated `GET /members` endpoint with `limit` and `offset` query parameters and total count metadata.
+  - **Edge-Case & Extra Tests**: Added focused tests in `tests/test_extras.py` covering member pagination and multi-item order cancellation inventory integrity (while leaving all original test files untouched).
   - **Database Compatibility**: Made database connection arguments dynamic in `app/db.py` (`check_same_thread` only applied for SQLite), ensuring smooth migration to hosted PostgreSQL (Supabase/Neon) without code changes.
 
 ## Architectural decisions & trade-offs
