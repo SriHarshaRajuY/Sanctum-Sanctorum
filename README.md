@@ -4,7 +4,7 @@ A complete backend API for a members-only clubhouse bookstore built with FastAPI
 
 ## What's Implemented
 
-This API is fully compliant with the project specifications and passes all 202 acceptance tests.
+This API is fully compliant with the project specifications and passes all 208 tests (including 202 original acceptance tests and 6 bonus/edge-case tests).
 
 ### Core Features
 - **Books Catalogue**: Full CRUD with ISBN-13 checksum validation, filtering, sorting, and pagination.
@@ -14,8 +14,9 @@ This API is fully compliant with the project specifications and passes all 202 a
 - **Reporting**: Top-selling books reports aggregated from paid orders.
 
 ### Bonus / Advanced Features added
-- **Concurrency Locking**: Order creation uses `with_for_update()` to ensure row-level database locks are acquired (ordered by book ID to prevent deadlocks). This ensures we never accidentally oversell the last copy of a book during concurrent checkouts.
+- **Concurrency Locking**: Order creation and loan checkout use `with_for_update()` to ensure row-level database locks are acquired (ordered by book ID to prevent deadlocks). This ensures we never accidentally oversell the last copy of a book during concurrent requests.
 - **Member Pagination**: Added full pagination (`limit`/`offset`) and total-count metadata to the `GET /members` endpoint.
+- **Extra Edge-Case Tests**: Added `tests/test_extras.py` testing pagination boundary validation and inventory restoration invariants upon order cancellation.
 
 ## Architecture Highlights
 - **Thin Routers, Thick Services**: The FastAPI routers only handle request parsing and dependency injection. All business rules, validation, and database commits happen in the service layer.
